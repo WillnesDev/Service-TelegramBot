@@ -53,7 +53,7 @@ async def handle_message(update: Update, context: CallbackContext):
 
 # Botni ishga tushirish
 def main():
-    application = ApplicationBuilder().token("YOUR_BOT_TOKEN").build()
+    application = ApplicationBuilder().token("7558561191:AAE4KBjYYpL3lgGAccRI-TY9OLesCQFRdbM").build()
 
     # Komandalarni qo'shish
     application.add_handler(CommandHandler("start", start))
