@@ -1,47 +1,66 @@
 import os
-import yt_dlp
+import logging
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, CallbackContext
+from pytube import YouTube
 import instaloader
-from aiogram import Bot, Dispatcher, types
-from aiogram.utils import executor
+import requests
 
-TOKEN = "7558561191:AAE4KBjYYpL3lgGAccRI-TY9OLesCQFRdbM"
-bot = Bot(token=TOKEN)
-dp = Dispatcher(bot)
+# Logging sozlash
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-@dp.message_handler(commands=['start'])
-async def start(message: types.Message):
-    await message.reply("Menga YouTube yoki Instagram havolasini yuboring, men videoni yuklab beraman.")
+# Instagram Reels yuklash
+def download_instagram_reels(url: str) -> str:
+    L = instaloader.Instaloader()
+    post = instaloader.Post.from_shortcode(L.context, url.split("/")[-2])
+    video_url = post.video_url
+    response = requests.get(video_url)
+    with open("reels.mp4", "wb") as file:
+        file.write(response.content)
+    return "reels.mp4"
 
-@dp.message_handler()
-async def download_video(message: types.Message):
-    url = message.text
-    if "youtube.com" in url or "youtu.be" in url:
-        await message.reply("⏳ Yuklab olinmoqda...")
+# YouTube video yuklash
+def download_youtube_video(url: str) -> str:
+    yt = YouTube(url)
+    stream = yt.streams.filter(progressive=True, file_extension='mp4').first()
+    stream.download(filename="youtube.mp4")
+    return "youtube.mp4"
 
-        ydl_opts = {
-            'outtmpl': 'video.mp4',
-            'format': 'best'
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
+# Start komandasi
+async def start(update: Update, context: CallbackContext):
+    await update.message.reply_text("Assalomu alaykum! Instagram Reels, YouTube video yoki YouTube Shorts havolasini yuboring.")
 
-        await message.reply_video(video=open("video.mp4", "rb"))
-        os.remove("video.mp4")
-    
-    elif "instagram.com/reel" in url:
-        await message.reply("⏳ Instagram Reels yuklab olinmoqda...")
-        
-        loader = instaloader.Instaloader()
-        shortcode = url.split("/")[-2]  # Instagram Reels URL-dan shortcode ajratib olish
-        post = instaloader.Post.from_shortcode(loader.context, shortcode)
-        loader.download_post(post, target="downloads")
-        
-        for file in os.listdir("downloads"):
-            if file.endswith(".mp4"):
-                await message.reply_video(video=open(f"downloads/{file}", "rb"))
-                os.remove(f"downloads/{file}")
-                break
+# Havolani qabul qilish
+async def handle_message(update: Update, context: CallbackContext):
+    url = update.message.text
+    if "instagram.com/reel/" in url:
+        try:
+            file_path = download_instagram_reels(url)
+            await update.message.reply_video(video=open(file_path, "rb"))
+            os.remove(file_path)
+        except Exception as e:
+            await update.message.reply_text(f"Xatolik: {e}")
+    elif "youtube.com/shorts/" in url or "youtube.com/watch" in url:
+        try:
+            file_path = download_youtube_video(url)
+            await update.message.reply_video(video=open(file_path, "rb"))
+            os.remove(file_path)
+        except Exception as e:
+            await update.message.reply_text(f"Xatolik: {e}")
     else:
-        await message.reply("❌ Bu havola qo‘llab-quvvatlanmaydi!")
+        await update.message.reply_text("Noto'g'ri havola. Iltimos, Instagram Reels, YouTube video yoki YouTube Shorts havolasini yuboring.")
 
-executor.start_polling(dp)
+# Botni ishga tushirish
+def main():
+    application = ApplicationBuilder().token("YOUR_BOT_TOKEN").build()
+
+    # Komandalarni qo'shish
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    # Botni ishga tushirish
+    application.run_polling()
+
+if __name__ == '__main__':
+    main()
